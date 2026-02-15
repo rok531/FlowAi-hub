@@ -187,6 +187,11 @@ function Dashboard({
   slackConnected,
   zoomConnected,
   connectionsLoading,
+  drafts,
+  draftsLoading,
+  onApproveDraft,
+  onRejectDraft,
+  draftActionLoading,
 }) {
   const [connecting, setConnecting] = useState(null);
 
@@ -247,8 +252,65 @@ function Dashboard({
           Welcome back, {email || 'creator'}
         </h2>
         <p className="mt-1 text-xs text-gray-400">
-          Connect Slack and Zoom to let FlowAI Hub transform meetings into tasks automatically.
+          Connect Slack and Zoom. Approve drafts before they’re sent—AI suggests, you decide.
         </p>
+      </div>
+
+      {/* Pending approvals (human-in-the-loop) */}
+      <div className="mb-5 rounded-lg border border-amber-500/30 bg-amber-950/20 p-3 text-xs">
+        <p className="font-medium text-amber-200">Pending approvals</p>
+        <p className="mt-0.5 text-[11px] text-gray-400">
+          AI drafted these—approve or reject before anything is sent.
+        </p>
+        {draftsLoading ? (
+          <div className="mt-2 flex items-center gap-2 text-gray-500">
+            <span className="h-3 w-3 animate-spin rounded-full border-2 border-gray-600 border-t-amber-400" />
+            Loading…
+          </div>
+        ) : drafts.length === 0 ? (
+          <p className="mt-2 text-[11px] text-gray-500">
+            No pending drafts. When N8N creates drafts from Zoom/Slack, they’ll appear here.
+          </p>
+        ) : (
+          <ul className="mt-2 space-y-2">
+            {drafts.map((d) => (
+              <li
+                key={d.id}
+                className="flex flex-col gap-2 rounded border border-gray-700 bg-black/30 p-2"
+              >
+                <div>
+                  <span className="font-medium text-gray-200">
+                    {d.title || `${d.type} from ${d.source}`}
+                  </span>
+                  {d.body && (
+                    <p className="mt-0.5 truncate text-[11px] text-gray-500">{d.body}</p>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onApproveDraft(d.id)}
+                    disabled={draftActionLoading === d.id}
+                    className="inline-flex items-center rounded bg-emerald-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-emerald-500 disabled:opacity-60"
+                  >
+                    {draftActionLoading === d.id ? (
+                      <ButtonSpinner light />
+                    ) : null}
+                    Approve
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onRejectDraft(d.id)}
+                    disabled={draftActionLoading === d.id}
+                    className="inline-flex items-center rounded border border-gray-600 bg-gray-800 px-2 py-1 text-[11px] font-medium text-gray-200 hover:bg-gray-700 disabled:opacity-60"
+                  >
+                    Reject
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       <div className="rounded-lg border border-gray-800 bg-black/40 p-3 text-xs text-gray-300">
@@ -329,6 +391,10 @@ export default function HomePage() {
 
   const [connections, setConnections] = useState({ slack: false, zoom: false });
   const [connectionsLoading, setConnectionsLoading] = useState(false);
+
+  const [drafts, setDrafts] = useState([]);
+  const [draftsLoading, setDraftsLoading] = useState(false);
+  const [draftActionLoading, setDraftActionLoading] = useState(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -413,6 +479,99 @@ export default function HomePage() {
       isMounted = false;
     };
   }, [session]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadDrafts() {
+      if (!session?.user?.id) {
+        if (isMounted) setDrafts([]);
+        return;
+      }
+      setDraftsLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('drafts')
+          .select('id, title, body, source, type, created_at')
+          .eq('user_id', session.user.id)
+          .eq('status', 'pending')
+          .order('created_at', { ascending: false })
+          .limit(20);
+
+        if (!isMounted) return;
+        if (error) throw error;
+        setDrafts(data || []);
+      } catch (err) {
+        console.error('[supabase] load drafts error', err);
+        if (isMounted) setDrafts([]);
+      } finally {
+        if (isMounted) setDraftsLoading(false);
+      }
+    }
+
+    loadDrafts();
+    return () => { isMounted = false; };
+  }, [session]);
+
+  const handleApproveDraft = async (draftId) => {
+    const session = (await supabase.auth.getSession()).data?.session;
+    if (!session?.access_token) {
+      setError('Session expired. Please sign in again.');
+      return;
+    }
+    setDraftActionLoading(draftId);
+    setError(null);
+    try {
+      const res = await fetch(`/api/drafts/${draftId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ action: 'approve' }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data?.error || 'Failed to approve');
+        return;
+      }
+      setDrafts((prev) => prev.filter((d) => d.id !== draftId));
+    } catch (err) {
+      setError(err?.message || 'Failed to approve');
+    } finally {
+      setDraftActionLoading(null);
+    }
+  };
+
+  const handleRejectDraft = async (draftId) => {
+    const session = (await supabase.auth.getSession()).data?.session;
+    if (!session?.access_token) {
+      setError('Session expired. Please sign in again.');
+      return;
+    }
+    setDraftActionLoading(draftId);
+    setError(null);
+    try {
+      const res = await fetch(`/api/drafts/${draftId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ action: 'reject' }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data?.error || 'Failed to reject');
+        return;
+      }
+      setDrafts((prev) => prev.filter((d) => d.id !== draftId));
+    } catch (err) {
+      setError(err?.message || 'Failed to reject');
+    } finally {
+      setDraftActionLoading(null);
+    }
+  };
 
   const validateCredentials = (mode) => {
     const trimmedEmail = (email || '').trim();
@@ -565,7 +724,7 @@ export default function HomePage() {
                 FlowAI Hub
               </span>
               <span className="text-[10px] uppercase tracking-[0.2em] text-gray-500">
-                Zoom → Slack automation
+                The AI that waits for your permission
               </span>
             </div>
           </div>
@@ -588,29 +747,28 @@ export default function HomePage() {
         <div className="mx-auto flex w-full max-w-6xl flex-col items-center gap-10 lg:flex-row lg:items-start lg:justify-between">
           <section className="max-w-xl text-center lg:text-left">
             <p className="text-xs font-semibold uppercase tracking-[0.28em] text-indigo-400">
-              AI workflow orchestration
+              Workflow reliability, not just summaries
             </p>
             <h1 className="mt-3 text-4xl font-semibold tracking-tight text-white sm:text-5xl md:text-6xl">
               FlowAI Hub
             </h1>
             <p className="mt-4 text-sm text-gray-300 sm:text-base">
-              Turn every Zoom conversation into structured, prioritized Slack tasks. FlowAI Hub
-              listens to your meetings, extracts decisions and action items, and sends them straight
-              into the channels where work actually happens.
+              Turn meeting decisions into actions—with one click to approve. No bot in the call.
+              No AI sending emails or tasks until you say so. AI drafts, you decide.
             </p>
 
             <div className="mt-6 flex flex-wrap items-center justify-center gap-3 text-[11px] text-gray-400 lg:justify-start">
               <div className="inline-flex items-center gap-1 rounded-full border border-gray-800 bg-gray-950/70 px-3 py-1">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                <span>Realtime Zoom capture</span>
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                <span>Human-in-the-loop: approve before it’s sent</span>
               </div>
               <div className="inline-flex items-center gap-1 rounded-full border border-gray-800 bg-gray-950/70 px-3 py-1">
                 <span className="h-1.5 w-1.5 rounded-full bg-sky-400" />
-                <span>Slack-native task threads</span>
+                <span>Approve from Slack—no extra app to open</span>
               </div>
               <div className="inline-flex items-center gap-1 rounded-full border border-gray-800 bg-gray-950/70 px-3 py-1">
-                <span className="h-1.5 w-1.5 rounded-full bg-indigo-400" />
-                <span>Privacy-first, team-ready</span>
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                <span>Team pricing: one price for the whole team</span>
               </div>
             </div>
           </section>
@@ -632,6 +790,11 @@ export default function HomePage() {
                   slackConnected={connections.slack}
                   zoomConnected={connections.zoom}
                   connectionsLoading={connectionsLoading}
+                  drafts={drafts}
+                  draftsLoading={draftsLoading}
+                  onApproveDraft={handleApproveDraft}
+                  onRejectDraft={handleRejectDraft}
+                  draftActionLoading={draftActionLoading}
                 />
               ) : (
                 <AuthCard
@@ -649,12 +812,29 @@ export default function HomePage() {
               )}
             </div>
 
+            {/* Pricing section */}
+            <section className="mt-6 rounded-xl border border-gray-800 bg-gray-950/50 p-4 text-center">
+              <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+                Team pricing
+              </p>
+              <p className="mt-1 text-sm text-gray-300">
+                Flat price for your whole team. No per-seat tax.
+              </p>
+              <div className="mt-3 flex flex-wrap justify-center gap-4 text-[11px]">
+                <span className="text-gray-500">Starter: $29/team</span>
+                <span className="text-gray-500">Growth: $99/team</span>
+              </div>
+              <p className="mt-2 text-[10px] text-gray-600">
+                Coming soon • Private beta: free access
+              </p>
+            </section>
+
             <footer className="mt-6 border-t border-gray-900 pt-4 text-center text-[11px] text-gray-500">
               <p>
-                © 2026 FlowAI Hub
+                © 2026 FlowAI Hub • Built with KINSO
               </p>
               <p className="mt-1 text-[10px] text-gray-600">
-                Private beta • Feedback &amp; support: support@flowai-hub.com
+                Don’t let AI hallucinate your business decisions. • support@flowai-hub.com
               </p>
             </footer>
           </section>
