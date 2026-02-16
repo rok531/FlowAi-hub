@@ -182,6 +182,7 @@ function AuthCard({
 
 function Dashboard({
   email,
+  userId,
   authLoading,
   onSignOut,
   slackConnected,
@@ -201,17 +202,19 @@ function Dashboard({
     setConnecting(provider);
   };
 
-  // Dynamic OAuth URLs based on current origin
+  // OAuth URLs: include state=userId so the callback can save the connection for this user
   const getSlackHref = () => {
     if (typeof window === 'undefined') return '#';
     const redirectUri = encodeURIComponent(`${window.location.origin}/api/slack-callback`);
-    return `https://slack.com/oauth/v2/authorize?client_id=10490775030869.10497112809173&scope=chat:write,channels:read,users:read&redirect_uri=${redirectUri}`;
+    const state = userId ? encodeURIComponent(userId) : '';
+    return `https://slack.com/oauth/v2/authorize?client_id=10490775030869.10497112809173&scope=chat:write,channels:read,users:read&redirect_uri=${redirectUri}${state ? `&state=${state}` : ''}`;
   };
 
   const getZoomHref = () => {
     if (typeof window === 'undefined') return '#';
     const redirectUri = encodeURIComponent(`${window.location.origin}/api/zoom-callback`);
-    return `https://zoom.us/oauth/authorize?response_type=code&client_id=c4cvH4S_TpSXe6FPcBQikQ&redirect_uri=${redirectUri}`;
+    const state = userId ? encodeURIComponent(userId) : '';
+    return `https://zoom.us/oauth/authorize?response_type=code&client_id=c4cvH4S_TpSXe6FPcBQikQ&redirect_uri=${redirectUri}${state ? `&state=${state}` : ''}`;
   };
 
   const slackHref = getSlackHref();
@@ -785,6 +788,7 @@ export default function HomePage() {
               ) : session ? (
                 <Dashboard
                   email={userEmail}
+                  userId={session?.user?.id}
                   authLoading={authLoading}
                   onSignOut={handleSignOut}
                   slackConnected={connections.slack}

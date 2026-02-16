@@ -1,18 +1,20 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import { createClient } from '@supabase/supabase-js';
 
 const SLACK_TOKEN_URL = 'https://slack.com/api/oauth.v2.access';
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function GET(request) {
   const url = new URL(request.url);
   const code = url.searchParams.get('code');
+  const state = url.searchParams.get('state'); // user_id passed from the app when starting OAuth
   
   // Dynamic redirect URI based on request origin
   const origin = url.origin;
   const redirectUri = `${origin}/api/slack-callback`;
 
-  console.log('[Slack OAuth] Callback received. Code:', code, 'Origin:', origin);
+  console.log('[Slack OAuth] Callback received. Code:', code, 'State:', state);
 
   const redirectConnected = NextResponse.redirect(
     new URL('/?slack=connected', request.url)
@@ -77,62 +79,22 @@ export async function GET(request) {
 
     console.log('[Slack OAuth] Tokens received. access_token length:', accessToken?.length, 'team_id:', teamId);
 
-    // Create Supabase client with cookies for server-side session access
-    const cookieStore = cookies();
+    // user_id comes from OAuth state (set by the app when user clicked Connect Slack)
+    const userId = (state && UUID_REGEX.test(state)) ? state : null;
+    if (!userId) {
+      console.error('[Slack OAuth] Missing or invalid state (user_id). Re-run Connect Slack from the dashboard.');
+      return redirectError;
+    }
+
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    
     if (!supabaseUrl || !supabaseAnonKey) {
       console.error('[Slack OAuth] Missing Supabase env vars.');
       return redirectError;
     }
 
-    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-      auth: {
-        persistSession: false,
-      },
-    });
-
-    // Get session from cookies
-    const authToken = cookieStore.get('sb-access-token')?.value || 
-                      cookieStore.get(`sb-${supabaseUrl.split('//')[1].split('.')[0]}-auth-token`)?.value;
-    
-    // Try to get user from session
-    let userId = null;
-    
-    // Check for Supabase session cookie (format varies)
-    const sessionCookie = cookieStore.getAll().find(c => 
-      c.name.includes('supabase') || c.name.includes('sb-')
-    );
-    
-    if (sessionCookie) {
-      try {
-        // Try to decode or get user from session
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          userId = user.id;
-        }
-      } catch (err) {
-        console.log('[Slack OAuth] Could not get user from session, will try alternative method');
-      }
-    }
-
-    // Alternative: Get user from access token if available
-    if (!userId && authToken) {
-      try {
-        const { data: { user } } = await supabase.auth.getUser(authToken);
-        if (user) userId = user.id;
-      } catch (err) {
-        console.log('[Slack OAuth] Could not get user from auth token');
-      }
-    }
-
-    if (!userId) {
-      console.error('[Slack OAuth] Failed to resolve Supabase user from session. User must be logged in.');
-      return redirectError;
-    }
-
-    console.log('[Slack OAuth] Supabase user resolved. user_id:', userId);
+    const supabase = createClient(supabaseUrl, supabaseAnonKey);
+    console.log('[Slack OAuth] Saving connection for user_id:', userId);
 
     // Save connection in Supabase
     const { error: insertError } = await supabase.from('connections').insert({
