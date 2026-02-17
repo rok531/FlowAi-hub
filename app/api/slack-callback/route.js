@@ -5,33 +5,23 @@ const SLACK_TOKEN_URL = 'https://slack.com/api/oauth.v2.access';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-function redirectErrorUrl(baseUrl, reason) {
-  const u = new URL(baseUrl);
-  u.pathname = '/';
-  u.searchParams.set('slack', 'error');
-  if (reason) u.searchParams.set('reason', reason);
-  return u.toString();
-}
-
 export async function GET(request) {
   const url = new URL(request.url);
   const code = url.searchParams.get('code');
   const state = url.searchParams.get('state'); // user_id passed from the app when starting OAuth
   
-  // Use VERCEL_URL on Vercel so redirect_uri matches what the client used; otherwise request origin
-  const baseUrl = process.env.VERCEL_URL
-    ? `https://${process.env.VERCEL_URL}`
-    : url.origin;
+  // On Vercel, request.url origin can differ from the public URL; Slack requires redirect_uri to match exactly what the client used
+  const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : url.origin;
   const redirectUri = `${baseUrl}/api/slack-callback`;
 
-  console.log('[Slack OAuth] Callback received. Code:', code ? 'present' : 'missing', 'State:', state ? 'present' : 'missing', 'redirectUri:', redirectUri);
+  console.log('[Slack OAuth] Callback. redirectUri:', redirectUri);
 
   const redirectConnected = NextResponse.redirect(new URL('/?slack=connected', baseUrl));
-  const redirectError = (reason) => NextResponse.redirect(redirectErrorUrl(baseUrl.replace(/\/$/, '') + '/', reason));
+  const redirectError = NextResponse.redirect(new URL('/?slack=error', baseUrl));
 
   if (!code) {
     console.warn('[Slack OAuth] Missing code parameter.');
-    return redirectError('no_code');
+    return redirectError;
   }
 
   const clientId = process.env.SLACK_CLIENT_ID;
@@ -39,7 +29,7 @@ export async function GET(request) {
 
   if (!clientId || !clientSecret) {
     console.error('[Slack OAuth] Missing SLACK_CLIENT_ID or SLACK_CLIENT_SECRET env vars.');
-    return redirectError('config');
+    return redirectError;
   }
 
   try {
@@ -66,7 +56,7 @@ export async function GET(request) {
 
     if (!response.ok || !data?.ok) {
       console.error('[Slack OAuth] Token exchange failed:', data);
-      return redirectError('token');
+      return redirectError;
     }
 
     const accessToken =
@@ -89,7 +79,7 @@ export async function GET(request) {
     const userId = (state && UUID_REGEX.test(state)) ? state : null;
     if (!userId) {
       console.error('[Slack OAuth] Missing or invalid state (user_id). Re-run Connect Slack from the dashboard.');
-      return redirectError('state');
+      return redirectError;
     }
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -97,7 +87,7 @@ export async function GET(request) {
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
     if (!supabaseUrl) {
       console.error('[Slack OAuth] Missing NEXT_PUBLIC_SUPABASE_URL.');
-      return redirectError('config');
+      return redirectError;
     }
     // Service role bypasses RLS so the server can insert for any user; anon key often fails here
     const supabase = createClient(
@@ -118,7 +108,7 @@ export async function GET(request) {
 
     if (insertError) {
       console.error('[Slack OAuth] Failed to persist connection in Supabase:', insertError);
-      return redirectError('insert');
+      return redirectError;
     }
 
     console.log('[Slack OAuth] Connection saved successfully for user_id:', userId);
@@ -126,7 +116,7 @@ export async function GET(request) {
     return redirectConnected;
   } catch (error) {
     console.error('[Slack OAuth] Unexpected error during token exchange or persistence:', error);
-    return redirectError('server');
+    return redirectError;
   }
 }
 

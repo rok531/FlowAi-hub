@@ -13,7 +13,7 @@ export async function GET(request) {
   const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : url.origin;
   const redirectUri = `${baseUrl}/api/zoom-callback`;
 
-  console.log('[Zoom OAuth] Callback received. Code:', code ? 'present' : 'missing', 'State:', state ? 'present' : 'missing');
+  console.log('[Zoom OAuth] Callback. redirectUri:', redirectUri);
 
   const redirectConnected = NextResponse.redirect(new URL('/?zoom=connected', baseUrl));
   const redirectError = NextResponse.redirect(new URL('/?zoom=error', baseUrl));
