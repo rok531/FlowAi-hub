@@ -25,11 +25,7 @@
 npm install
 ```
 
-2. Set up environment variables:
-```bash
-cp .env.local.example .env.local
-# Fill in your actual values
-```
+2. Create `.env.local` in the project root and add your keys (see **Environment Variables** below).
 
 3. Run the development server:
 ```bash
@@ -40,15 +36,22 @@ npm run dev
 
 ## Environment Variables
 
-See `.env.local.example`. Required:
+Put these in `.env.local` (local) and in Vercel → Settings → Environment Variables (production).
 
-- `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET`
-- `ZOOM_CLIENT_ID`, `ZOOM_CLIENT_SECRET`
+**Required:**
 
-Optional:
+- `NEXT_PUBLIC_SUPABASE_URL` – Supabase project URL (Project Settings → API)
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY` – Supabase anon key (Project Settings → API)
+- `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET` – from [api.slack.com/apps](https://api.slack.com/apps)
+- `ZOOM_CLIENT_ID`, `ZOOM_CLIENT_SECRET` – from [marketplace.zoom.us/develop](https://marketplace.zoom.us/develop)
 
-- `N8N_WEBHOOK_URL` – When a draft is approved, the app POSTs `{ draftId, action: 'approved', userId }` here so N8N can execute the action (e.g. post to Slack, create Jira ticket).
+**Recommended for OAuth callbacks (so Slack/Zoom “Connected” status works):**
+
+- `SUPABASE_SERVICE_ROLE_KEY` – Supabase service_role key (Project Settings → API); used in callbacks to save connections when RLS is on.
+
+**Optional:**
+
+- `N8N_WEBHOOK_URL` – When a draft is approved, the app POSTs `{ draftId, action: 'approved', userId }` here so N8N can execute the action.
 
 ## Database Setup
 

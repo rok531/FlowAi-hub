@@ -15,32 +15,64 @@ function ButtonSpinner({ light = false }) {
   );
 }
 
+const SLACK_ERROR_HINTS = {
+  state: 'Your session wasn’t passed to Slack. Sign in again, then click Connect Slack.',
+  no_code: 'Slack didn’t return a code. Check that the redirect URL in your Slack app matches this site.',
+  token: 'Slack rejected the token exchange. Confirm the redirect URL in Slack app settings matches this site exactly.',
+  insert: 'Connection could not be saved. Add SUPABASE_SERVICE_ROLE_KEY in Vercel (and redeploy), or check Supabase logs.',
+  config: 'Server is missing Slack or Supabase env vars. Check Vercel Environment Variables.',
+  server: 'Something went wrong on the server. Check Vercel function logs.',
+};
+
 function ConnectedBannerInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
 
   const [message, setMessage] = useState(null);
+  const [errorMessage, setErrorMessage] = useState(null);
+  const [errorSource, setErrorSource] = useState(null); // 'slack' | 'zoom'
 
   useEffect(() => {
     const slack = searchParams.get('slack');
     const zoom = searchParams.get('zoom');
+    const reason = searchParams.get('reason');
 
     let nextMessage = null;
+    let nextError = null;
+    let nextSource = null;
     if (slack === 'connected') {
       nextMessage = 'Slack has been connected successfully.';
     } else if (zoom === 'connected') {
       nextMessage = 'Zoom has been connected successfully.';
+    } else if (slack === 'error') {
+      nextError = reason && SLACK_ERROR_HINTS[reason] ? SLACK_ERROR_HINTS[reason] : 'Try again or check Vercel logs.';
+      nextSource = 'slack';
+    } else if (zoom === 'error') {
+      nextError = 'Try again or check Vercel logs.';
+      nextSource = 'zoom';
     }
 
     if (nextMessage) {
       setMessage(nextMessage);
-      if (pathname) {
-        router.replace(pathname, { scroll: false });
-      }
+      setErrorMessage(null);
+      setErrorSource(null);
+      if (pathname) router.replace(pathname, { scroll: false });
+    } else if (nextError) {
+      setErrorMessage(nextError);
+      setErrorSource(nextSource);
+      setMessage(null);
     }
   }, [searchParams, router, pathname]);
 
+  if (errorMessage) {
+    const label = errorSource === 'zoom' ? 'Zoom connection failed' : 'Slack connection failed';
+    return (
+      <div className="mb-6 rounded-lg border border-red-500/70 bg-red-950/70 px-4 py-3 text-sm text-red-100">
+        <span className="font-semibold">{label}:</span> {errorMessage}
+      </div>
+    );
+  }
   if (!message) return null;
 
   return (

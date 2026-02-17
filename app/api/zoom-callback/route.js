@@ -8,20 +8,15 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 export async function GET(request) {
   const url = new URL(request.url);
   const code = url.searchParams.get('code');
-  const state = url.searchParams.get('state'); // user_id passed from the app when starting OAuth
-  
-  // Dynamic redirect URI based on request origin
-  const origin = url.origin;
-  const redirectUri = `${origin}/api/zoom-callback`;
+  const state = url.searchParams.get('state');
 
-  console.log('[Zoom OAuth] Callback received. Code:', code, 'State:', state);
+  const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : url.origin;
+  const redirectUri = `${baseUrl}/api/zoom-callback`;
 
-  const redirectConnected = NextResponse.redirect(
-    new URL('/?zoom=connected', request.url)
-  );
-  const redirectError = NextResponse.redirect(
-    new URL('/?zoom=error', request.url)
-  );
+  console.log('[Zoom OAuth] Callback received. Code:', code ? 'present' : 'missing', 'State:', state ? 'present' : 'missing');
+
+  const redirectConnected = NextResponse.redirect(new URL('/?zoom=connected', baseUrl));
+  const redirectError = NextResponse.redirect(new URL('/?zoom=error', baseUrl));
 
   if (!code) {
     console.warn('[Zoom OAuth] Missing code parameter.');
@@ -71,22 +66,25 @@ export async function GET(request) {
 
     console.log('[Zoom OAuth] Tokens received. access_token length:', accessToken?.length, 'team_id/account_id:', teamId);
 
-    // user_id comes from OAuth state (set by the app when user clicked Connect Zoom)
     const userId = (state && UUID_REGEX.test(state)) ? state : null;
     if (!userId) {
-      console.error('[Zoom OAuth] Missing or invalid state (user_id). Re-run Connect Zoom from the dashboard.');
+      console.error('[Zoom OAuth] Missing or invalid state (user_id).');
       return redirectError;
     }
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    if (!supabaseUrl || !supabaseAnonKey) {
-      console.error('[Zoom OAuth] Missing Supabase env vars.');
+    if (!supabaseUrl) {
+      console.error('[Zoom OAuth] Missing NEXT_PUBLIC_SUPABASE_URL.');
       return redirectError;
     }
-
-    const supabase = createClient(supabaseUrl, supabaseAnonKey);
-    console.log('[Zoom OAuth] Saving connection for user_id:', userId);
+    const supabase = createClient(
+      supabaseUrl,
+      supabaseServiceKey || supabaseAnonKey,
+      supabaseServiceKey ? { auth: { persistSession: false, autoRefreshToken: false } } : {}
+    );
+    console.log('[Zoom OAuth] Saving connection for user_id:', userId, 'using', supabaseServiceKey ? 'service_role' : 'anon');
 
     // Save connection in Supabase
     const { error: insertError } = await supabase.from('connections').insert({

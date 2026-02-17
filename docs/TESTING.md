@@ -11,7 +11,7 @@ Use this to test auth, Slack/Zoom connections, and the human-in-the-loop drafts 
    - Run `supabase/migrations/001_create_drafts.sql` in Supabase → SQL Editor so the `drafts` table exists.
 
 2. **Environment**
-   - `.env.local` has: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET`, `ZOOM_CLIENT_ID`, `ZOOM_CLIENT_SECRET`.
+   - `.env.local` has the required vars (see README). For Slack/Zoom connection status to work, include `SUPABASE_SERVICE_ROLE_KEY` too.
 
 3. **App running**
    - Local: `npm run dev` → open http://localhost:3000  
@@ -118,6 +118,29 @@ Only if you use N8N and set `N8N_WEBHOOK_URL`.
 | 4b | Open app → Pending approvals | Draft visible; Approve removes it, row `approved` |
 | 4c | Insert draft → Reject | Draft removed, row `rejected` |
 | 5 | Set N8N webhook, approve draft | N8N receives POST with draftId, action, userId |
+
+---
+
+## Debugging: still shows "Not connected" after Slack/Zoom
+
+1. **Add the service role key**  
+   The callback runs on the server with no user session; RLS can block the insert.  
+   - Supabase → Project Settings → API → copy **service_role** (secret).  
+   - Vercel → Settings → Environment Variables → add `SUPABASE_SERVICE_ROLE_KEY` = that value.  
+   - Add the same to `.env.local` for local. Redeploy on Vercel.
+
+2. **Check if rows are saved**  
+   Supabase → Table Editor → **connections**. Connect Slack again, refresh. If a row appears, the callback works; if not, check Vercel function logs for `[Slack OAuth] Failed to persist` or `Missing or invalid state`.
+
+3. **RLS on connections**  
+   If the table has RLS enabled, allow the user to read their own rows:
+   ```sql
+   ALTER TABLE connections ENABLE ROW LEVEL SECURITY;
+   CREATE POLICY "Users can read own connections" ON connections FOR SELECT USING (auth.uid() = user_id);
+   ```
+
+4. **Browser**  
+   DevTools → Console: look for `[supabase] load connections error` or `Loaded connection providers: [...]`. Network tab: check the Supabase request that fetches `connections` and its response.
 
 ---
 
