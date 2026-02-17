@@ -71,6 +71,18 @@ CREATE INDEX idx_connections_user_id ON connections(user_id);
 CREATE INDEX idx_connections_provider ON connections(provider);
 ```
 
+**So the dashboard can show "Connected", allow logged-in users to read their own rows:**
+
+```sql
+ALTER TABLE connections ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can read own connections"
+  ON connections FOR SELECT
+  USING (auth.uid() = user_id);
+```
+
+(Inserts are done from the OAuth callback using the service role key, which bypasses RLS.)
+
 ### 2. Drafts table (human-in-the-loop)
 
 Run the migration in **Supabase → SQL Editor** (or use Supabase CLI):
@@ -106,13 +118,22 @@ Or create manually: see `supabase/migrations/001_create_drafts.sql`. Key columns
 
 ## OAuth Setup
 
-### Slack
-- [api.slack.com/apps](https://api.slack.com/apps) → Your App → OAuth & Permissions  
-- Redirect URLs: `http://localhost:3000/api/slack-callback`, `https://your-domain.vercel.app/api/slack-callback`
+Use the **exact** redirect URLs below (no trailing slash). Replace the domain with your real app URL if different.
 
-### Zoom
-- [marketplace.zoom.us/develop](https://marketplace.zoom.us/develop) → Your App → OAuth  
-- Redirect URLs: `http://localhost:3000/api/zoom-callback`, `https://your-domain.vercel.app/api/zoom-callback`
+### Slack
+1. [api.slack.com/apps](https://api.slack.com/apps) → Your App → **OAuth & Permissions**
+2. Under **Redirect URLs**, add:
+   - Production: `https://flowai-hub.vercel.app/api/slack-callback`
+   - Local: `http://localhost:3000/api/slack-callback`
+3. **Save URLs**
+
+### Zoom (fixes "Invalid redirect url" / error 4700)
+1. [marketplace.zoom.us/develop](https://marketplace.zoom.us/develop) → Your App
+2. Open **OAuth** (or **App Credentials** → Redirect URL)
+3. Add **exactly** (copy-paste):
+   - Production: `https://flowai-hub.vercel.app/api/zoom-callback`
+   - Local: `http://localhost:3000/api/zoom-callback`
+4. Save. Zoom is strict: the URL must match character-for-character.
 
 ## Deployment (Vercel)
 
