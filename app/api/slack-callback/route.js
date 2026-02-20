@@ -72,6 +72,7 @@ export async function GET(request) {
       data.team?.team_id ||
       data.team_id ||
       '';
+    const slackUserId = data.authed_user?.id || '';
 
     console.log('[Slack OAuth] Tokens received. access_token length:', accessToken?.length, 'team_id:', teamId);
 
@@ -109,6 +110,14 @@ export async function GET(request) {
     if (insertError) {
       console.error('[Slack OAuth] Failed to persist connection in Supabase:', insertError);
       return redirectError;
+    }
+
+    // Map Slack user id → Supabase user_id so N8N can assign drafts to this user
+    if (slackUserId) {
+      await supabase.from('provider_identifiers').upsert(
+        { user_id: userId, provider: 'slack', external_id: String(slackUserId) },
+        { onConflict: 'provider,external_id' }
+      );
     }
 
     console.log('[Slack OAuth] Connection saved successfully for user_id:', userId);

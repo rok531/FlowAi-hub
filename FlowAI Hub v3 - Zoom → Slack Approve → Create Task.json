@@ -1,0 +1,1060 @@
+{
+  "name": "FlowAI Hub v3 - Zoom → Slack Approve → Create Task",
+  "nodes": [
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "operation": "get",
+        "meetingId": "={{ $json.body.payload.object.id }}",
+        "additionalFields": {}
+      },
+      "id": "0b44c9dd-a811-42a0-a2b9-d46d210be207",
+      "name": "Zoom Meeting Ended",
+      "type": "n8n-nodes-base.zoom",
+      "typeVersion": 1,
+      "position": [
+        1216,
+        304
+      ],
+      "credentials": {
+        "zoomOAuth2Api": {
+          "id": "Gg7ri1xgrWhyEfvZ",
+          "name": "Zoom account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "user_id",
+              "value": "={{ $json.body.payload.object.host_id }}",
+              "type": "string"
+            },
+            {
+              "id": "id-2",
+              "name": "source",
+              "value": "zoom",
+              "type": "string"
+            },
+            {
+              "id": "id-3",
+              "name": "type",
+              "value": "task",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "087662dc-8942-4050-85b2-7a181106ca9a",
+      "name": "Workflow Configuration A",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1440,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "provider_identifiers",
+        "returnAll": false,
+        "limit": 1,
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "provider",
+              "condition": "eq",
+              "keyValue": "zoom"
+            },
+            {
+              "keyName": "external_id",
+              "condition": "eq",
+              "keyValue": "={{ $('Workflow Configuration A').item.json.user_id }}"
+            }
+          ]
+        }
+      },
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "name": "Lookup Supabase User (Zoom)",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1552,
+        304
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "W7ytyUQWIKZLFfCu",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "user_id",
+              "value": "={{ $json.user_id }}",
+              "type": "string"
+            },
+            {
+              "id": "id-2",
+              "name": "source",
+              "value": "={{ $('Workflow Configuration A').item.json.source }}",
+              "type": "string"
+            },
+            {
+              "id": "id-3",
+              "name": "type",
+              "value": "={{ $('Workflow Configuration A').item.json.type }}",
+              "type": "string"
+            },
+            {
+              "id": "id-4",
+              "name": "title",
+              "value": "={{ $('Zoom Meeting Ended').item.json.topic || 'Zoom Meeting Action Items' }}",
+              "type": "string"
+            },
+            {
+              "id": "id-5",
+              "name": "body",
+              "value": "={{ $('Zoom Meeting Ended').item.json.agenda || 'Meeting ended - action items to be processed' }}",
+              "type": "string"
+            },
+            {
+              "id": "id-6",
+              "name": "status",
+              "value": "pending",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d7a1119a-278e-49df-bed8-33346509336a",
+      "name": "Prepare Draft Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1664,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "tableId": "drafts",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "user_id",
+              "fieldValue": "={{ $json.user_id }}"
+            },
+            {
+              "fieldId": "source",
+              "fieldValue": "={{ $json.source }}"
+            },
+            {
+              "fieldId": "type",
+              "fieldValue": "={{ $json.type }}"
+            },
+            {
+              "fieldId": "title",
+              "fieldValue": "={{ $json.title }}"
+            },
+            {
+              "fieldId": "body",
+              "fieldValue": "={{ $json.body }}"
+            },
+            {
+              "fieldId": "status",
+              "fieldValue": "={{ $json.status }}"
+            }
+          ]
+        }
+      },
+      "id": "bfe62244-361d-460a-a337-17637c2bfd89",
+      "name": "Insert Draft to Supabase",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1888,
+        304
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "W7ytyUQWIKZLFfCu",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "trigger": [
+          "app_mention",
+          "message"
+        ],
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "C0AEG46F03Y"
+        },
+        "options": {}
+      },
+      "id": "3714e5ea-c5ac-4cbc-b505-1c46b0e9f6c0",
+      "name": "When Slack Message Received",
+      "type": "n8n-nodes-base.slackTrigger",
+      "typeVersion": 1,
+      "position": [
+        992,
+        528
+      ],
+      "webhookId": "5e3cde41-4f31-40d5-bf53-eb60a69ea288",
+      "credentials": {
+        "slackApi": {
+          "id": "DJrgdXWfczKjMRmk",
+          "name": "Slack account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "user_id",
+              "value": "={{ $json.user }}",
+              "type": "string"
+            },
+            {
+              "id": "id-2",
+              "name": "source",
+              "value": "slack",
+              "type": "string"
+            },
+            {
+              "id": "id-3",
+              "name": "type",
+              "value": "task",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "758cfff3-8d6b-4706-8296-20bfd8cd2dda",
+      "name": "Workflow Configuration A2",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1216,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "provider_identifiers",
+        "returnAll": false,
+        "limit": 1,
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "provider",
+              "condition": "eq",
+              "keyValue": "slack"
+            },
+            {
+              "keyName": "external_id",
+              "condition": "eq",
+              "keyValue": "={{ $('Workflow Configuration A2').item.json.user_id }}"
+            }
+          ]
+        }
+      },
+      "id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+      "name": "Lookup Supabase User (Slack)",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1328,
+        528
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "W7ytyUQWIKZLFfCu",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "user_id",
+              "value": "={{ $json.user_id }}",
+              "type": "string"
+            },
+            {
+              "id": "id-2",
+              "name": "source",
+              "value": "={{ $('Workflow Configuration A2').item.json.source }}",
+              "type": "string"
+            },
+            {
+              "id": "id-3",
+              "name": "type",
+              "value": "={{ $('Workflow Configuration A2').item.json.type }}",
+              "type": "string"
+            },
+            {
+              "id": "id-4",
+              "name": "title",
+              "value": "={{ $('When Slack Message Received').item.json.text.substring(0, 100) || 'Slack Message Task' }}",
+              "type": "string"
+            },
+            {
+              "id": "id-5",
+              "name": "body",
+              "value": "={{ $('When Slack Message Received').item.json.text }}",
+              "type": "string"
+            },
+            {
+              "id": "id-6",
+              "name": "status",
+              "value": "pending",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "88895fa2-b44e-408c-ba7c-1a004cd52b81",
+      "name": "Prepare Draft Data from Slack",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1552,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "tableId": "drafts",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "user_id",
+              "fieldValue": "={{ $json.user_id }}"
+            },
+            {
+              "fieldId": "source",
+              "fieldValue": "={{ $json.source }}"
+            },
+            {
+              "fieldId": "type",
+              "fieldValue": "={{ $json.type }}"
+            },
+            {
+              "fieldId": "title",
+              "fieldValue": "={{ $json.title }}"
+            },
+            {
+              "fieldId": "body",
+              "fieldValue": "={{ $json.body }}"
+            },
+            {
+              "fieldId": "status",
+              "fieldValue": "={{ $json.status }}"
+            }
+          ]
+        }
+      },
+      "id": "dc89f80c-a9af-4773-84f6-12be050221f4",
+      "name": "Insert Draft from Slack",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1664,
+        528
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "W7ytyUQWIKZLFfCu",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "/draft-approval",
+        "options": {}
+      },
+      "id": "f275fea0-6117-46a5-98a8-173ce80538be",
+      "name": "Webhook Approval Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        992,
+        848
+      ],
+      "webhookId": "d8d93d36-d1cc-4e2f-8b09-8c6be90aab15"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "draftId",
+              "value": "={{ $json.body.draftId }}",
+              "type": "string"
+            },
+            {
+              "id": "id-2",
+              "name": "action",
+              "value": "={{ $json.body.action }}",
+              "type": "string"
+            },
+            {
+              "id": "id-3",
+              "name": "userId",
+              "value": "={{ $json.body.userId }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "7b62d24a-3de6-497b-9852-58d106f06af7",
+      "name": "Workflow Configuration B",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1216,
+        848
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "tableId": "drafts",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "keyValue": "={{ $('Workflow Configuration B').item.json.draftId }}"
+            }
+          ]
+        }
+      },
+      "id": "ae65009b-401c-4f85-80aa-f3add945e5e6",
+      "name": "Get Draft by ID",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1440,
+        848
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "W7ytyUQWIKZLFfCu",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "id-1",
+              "leftValue": "={{ $('Workflow Configuration B').item.json.action }}",
+              "rightValue": "approved",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "2444d5db-be0e-4eee-9cff-961c4490daec",
+      "name": "Check if Approved",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1664,
+        848
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Get Draft by ID').item.json.type }}",
+                    "rightValue": "slack",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Slack"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Get Draft by ID').item.json.type }}",
+                    "rightValue": "jira",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Jira"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "618f7766-8010-4654-9048-3b1360ab9d74",
+      "name": "Route by Draft Type",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1888,
+        848
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0AEG46F03Y",
+          "mode": "list",
+          "cachedResultName": "all-flowai-hub"
+        },
+        "text": "={{ $('Get Draft by ID').item.json.body }}",
+        "otherOptions": {}
+      },
+      "id": "4b026f66-d2f4-49f0-b796-52f914011325",
+      "name": "Post to Slack",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.4,
+      "position": [
+        2112,
+        752
+      ],
+      "webhookId": "77b02b65-5853-4f47-86c6-c82c7cf18532",
+      "credentials": {
+        "slackOAuth2Api": {
+          "id": "ZChAa9l9b3TpKBI8",
+          "name": "Slack account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "project": {
+          "__rl": true,
+          "mode": "list",
+          "value": "10000",
+          "cachedResultName": "FlowAI Hub"
+        },
+        "issueType": {
+          "__rl": true,
+          "mode": "list",
+          "value": "Task"
+        },
+        "summary": "={{ $('Get Draft by ID').item.json.title }}",
+        "additionalFields": {
+          "description": "={{ $('Get Draft by ID').item.json.body }}"
+        }
+      },
+      "id": "2e5f63fc-900d-4fed-8eeb-9a3393b78324",
+      "name": "Create Jira Issue",
+      "type": "n8n-nodes-base.jira",
+      "typeVersion": 1,
+      "position": [
+        2112,
+        944
+      ],
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "Zc5U4VOGsIy9PDmg",
+          "name": "Jira SW Cloud account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "/zoom-meeting-end",
+        "options": {}
+      },
+      "id": "2a5ab5b6-a04f-4afb-9b71-e190704303b9",
+      "name": "Zoom Meeting End Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        992,
+        304
+      ],
+      "webhookId": "209a627f-724b-4d54-a272-4cd444a047c4"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "drafts",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Workflow Configuration B').item.json.draftId }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "status",
+              "fieldValue": "executed"
+            }
+          ]
+        }
+      },
+      "id": "1966696b-590c-4c2c-9ad3-b50255475bd1",
+      "name": "Update Draft Status - Slack",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        2400,
+        304
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "W7ytyUQWIKZLFfCu",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "drafts",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Workflow Configuration B').item.json.draftId }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "status",
+              "fieldValue": "executed"
+            }
+          ]
+        }
+      },
+      "id": "d0013f56-d04c-40d9-852e-e517fde9fb9e",
+      "name": "Update Draft Status - Jira",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        2400,
+        528
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "W7ytyUQWIKZLFfCu",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "drafts",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Workflow Configuration B').item.json.draftId }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "status",
+              "fieldValue": "rejected"
+            }
+          ]
+        }
+      },
+      "id": "38a053ce-fe1c-4d85-ba0f-e8c57d3a6ed9",
+      "name": "Update Draft Status - Rejected",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        2400,
+        752
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "W7ytyUQWIKZLFfCu",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "channel",
+              "value": "={{ $('Get Draft by ID').item.json.body }}",
+              "type": "string"
+            },
+            {
+              "id": "id-2",
+              "name": "message",
+              "value": "={{ $('Get Draft by ID').item.json.body }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "f5b51277-e1c8-440c-9eb8-65a62c5260ba",
+      "name": "Prepare Slack Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2400,
+        976
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "summary",
+              "value": "={{ $('Get Draft by ID').item.json.title }}",
+              "type": "string"
+            },
+            {
+              "id": "id-2",
+              "name": "description",
+              "value": "={{ $('Get Draft by ID').item.json.body }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "018b50fd-8293-430d-9629-dac09cd32039",
+      "name": "Prepare Jira Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2400,
+        1200
+      ]
+    }
+  ],
+  "pinData": {
+    "Post to Slack": [
+      {
+        "json": {
+          "name": "First item",
+          "code": 1
+        }
+      },
+      {
+        "json": {
+          "name": "Second item",
+          "code": 2
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Zoom Meeting Ended": {
+      "main": [
+        [
+          {
+            "node": "Workflow Configuration A",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Workflow Configuration A": {
+      "main": [
+        [
+          {
+            "node": "Lookup Supabase User (Zoom)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lookup Supabase User (Zoom)": {
+      "main": [
+        [
+          {
+            "node": "Prepare Draft Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Draft Data": {
+      "main": [
+        [
+          {
+            "node": "Insert Draft to Supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Slack Message Received": {
+      "main": [
+        [
+          {
+            "node": "Workflow Configuration A2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Workflow Configuration A2": {
+      "main": [
+        [
+          {
+            "node": "Lookup Supabase User (Slack)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lookup Supabase User (Slack)": {
+      "main": [
+        [
+          {
+            "node": "Prepare Draft Data from Slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Draft Data from Slack": {
+      "main": [
+        [
+          {
+            "node": "Insert Draft from Slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Approval Trigger": {
+      "main": [
+        [
+          {
+            "node": "Workflow Configuration B",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Workflow Configuration B": {
+      "main": [
+        [
+          {
+            "node": "Get Draft by ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Draft by ID": {
+      "main": [
+        [
+          {
+            "node": "Check if Approved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check if Approved": {
+      "main": [
+        [
+          {
+            "node": "Route by Draft Type",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Draft Status - Rejected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Draft Type": {
+      "main": [
+        [
+          {
+            "node": "Prepare Slack Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Jira Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Zoom Meeting End Webhook": {
+      "main": [
+        [
+          {
+            "node": "Zoom Meeting Ended",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Jira Issue": {
+      "main": [
+        [
+          {
+            "node": "Update Draft Status - Jira",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Slack Data": {
+      "main": [
+        [
+          {
+            "node": "Post to Slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Jira Data": {
+      "main": [
+        [
+          {
+            "node": "Create Jira Issue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post to Slack": {
+      "main": [
+        [
+          {
+            "node": "Update Draft Status - Slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "db2bdd6f-71e8-493f-9b0a-89c771e9f8aa",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "01903f2c0454c684964f668678ef4f952d26e4ad341dc369bd4aa99f0b6dca15"
+  },
+  "id": "5jxgKa0oziGabNtm",
+  "tags": []
+}

@@ -63,6 +63,7 @@ export async function GET(request) {
     const accessToken = data.access_token || '';
     const refreshToken = data.refresh_token || '';
     const teamId = data.account_id || data.user_id || '';
+    const zoomUserId = data.user_id || teamId || '';
 
     console.log('[Zoom OAuth] Tokens received. access_token length:', accessToken?.length, 'team_id/account_id:', teamId);
 
@@ -98,6 +99,14 @@ export async function GET(request) {
     if (insertError) {
       console.error('[Zoom OAuth] Failed to persist connection in Supabase:', insertError);
       return redirectError;
+    }
+
+    // Map Zoom user/host id → Supabase user_id so N8N can assign drafts to this user
+    if (zoomUserId) {
+      await supabase.from('provider_identifiers').upsert(
+        { user_id: userId, provider: 'zoom', external_id: String(zoomUserId) },
+        { onConflict: 'provider,external_id' }
+      );
     }
 
     console.log('[Zoom OAuth] Connection saved successfully for user_id:', userId);

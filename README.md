@@ -51,7 +51,7 @@ Put these in `.env.local` (local) and in Vercel → Settings → Environment Var
 
 **Optional:**
 
-- `N8N_WEBHOOK_URL` – When a draft is approved, the app POSTs `{ draftId, action: 'approved', userId }` here so N8N can execute the action.
+- `N8N_WEBHOOK_URL` – When a draft is approved, the app POSTs `{ draftId, action: 'approved', userId }` here. Use your N8N webhook URL (e.g. `https://your-n8n.com/webhook/draft-approval`). See `docs/N8N_SETUP.md`.
 
 ## Database Setup
 
@@ -85,14 +85,13 @@ CREATE POLICY "Users can read own connections"
 
 ### 2. Drafts table (human-in-the-loop)
 
-Run the migration in **Supabase → SQL Editor** (or use Supabase CLI):
+Run the migrations in **Supabase → SQL Editor** in order:
 
-```bash
-# From project root, apply migration:
-# Copy contents of supabase/migrations/001_create_drafts.sql into SQL Editor and Run.
-```
+1. `supabase/migrations/001_create_drafts.sql` – drafts table  
+2. `supabase/migrations/002_provider_identifiers.sql` – maps Zoom host_id / Slack user id → Supabase user_id (used by N8N to assign drafts)  
+3. `supabase/migrations/003_drafts_status_executed.sql` – allows N8N to set status to `executed` after posting to Slack/Jira  
 
-Or create manually: see `supabase/migrations/001_create_drafts.sql`. Key columns:
+Or create manually: see those files. Key columns for `drafts`:
 
 - `user_id`, `source` (zoom | slack | email), `type` (task | message | email | ticket)
 - `title`, `body`, `payload` (JSONB)
@@ -102,7 +101,7 @@ Or create manually: see `supabase/migrations/001_create_drafts.sql`. Key columns
 ## N8N Integration (canonical flow)
 
 1. **N8N writes drafts**  
-   After processing Zoom/Slack (e.g. extract tasks), N8N inserts rows into Supabase `drafts` with `status = 'pending'` and `user_id` = the FlowAI Hub user who owns the connection. Use Supabase node with **service role** key so RLS doesn't block inserts.
+   After processing Zoom/Slack (e.g. Zoom meeting end, Slack message), N8N must **look up** the Supabase `user_id` from the `provider_identifiers` table (by Zoom `host_id` or Slack `user` id). FlowAI Hub fills that table when users click Connect Zoom / Connect Slack. Then N8N inserts into `drafts` with that `user_id`, `status = 'pending'`. Use Supabase node with **service role** key.
 
 2. **User approves in FlowAI Hub**  
    Dashboard shows "Pending approvals". User clicks **Approve** or **Reject**.

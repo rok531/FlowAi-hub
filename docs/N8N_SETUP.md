@@ -1,26 +1,24 @@
 # N8N setup for FlowAI Hub
 
-This guide explains **Step 2: In N8N**—how to wire N8N so it creates drafts in Supabase and (optionally) runs a workflow when a user approves a draft in FlowAI Hub.
+This guide explains **Step 2: In N8N**—how to wire N8N so it creates drafts in Supabase and runs a workflow when a user approves a draft in FlowAI Hub (Zoom → approve in Hub → create task in Slack).
 
 ---
 
 ## Overview
 
-- **Workflow A – “Create draft”:** When something happens (e.g. Zoom meeting ends, new Slack message), N8N creates a row in the `drafts` table. The user then sees it in FlowAI Hub under “Pending approvals” and can Approve or Reject.
-- **Workflow B – “Execute approved”:** When a user clicks **Approve** in FlowAI Hub, the app can POST to an N8N webhook. N8N then runs your “execute” logic (e.g. post to Slack, create Jira ticket).
-
-You can start with Workflow A only; add Workflow B when you want approvals to trigger actions.
+- **Workflow A – “Create draft”:** When something happens (e.g. Zoom meeting ends, new Slack message), N8N looks up the Supabase `user_id` from the `provider_identifiers` table (using Zoom host_id or Slack user id), then inserts a row in `drafts`. The user sees it in FlowAI Hub under “Pending approvals” and can Approve or Reject.
+- **Workflow B – “Execute approved”:** When a user clicks **Approve** in FlowAI Hub, the app updates the draft to `approved` and POSTs to your N8N webhook. N8N loads the draft, posts to Slack (or Jira, etc.), then updates the draft status to `executed`.
 
 ---
 
 ## Prerequisites
 
 1. **Supabase**
-   - `drafts` table created (run `supabase/migrations/001_create_drafts.sql` in SQL Editor).
-   - **Service role key** (not the anon key): Supabase Dashboard → Project Settings → API → `service_role` (secret). N8N needs this to insert into `drafts` (RLS is bypassed for the service role).
+   - Run migrations in order: `001_create_drafts.sql`, `002_provider_identifiers.sql`, `003_drafts_status_executed.sql` (SQL Editor or Supabase CLI).
+   - **Service role key** (not the anon key): Supabase Dashboard → Project Settings → API → `service_role`. N8N uses this to insert/update `drafts` and to read `provider_identifiers` for user lookup.
 
-2. **User ID**
-   - You need a `user_id` (UUID from `auth.users`) to assign the draft to. For testing you can copy one user’s ID from Supabase → Authentication → Users. Later you can resolve it from Slack/Zoom context (e.g. from your `connections` table by `team_id` or email).
+2. **User ID resolution**
+   - FlowAI Hub stores a mapping from Zoom/Slack identities to Supabase `user_id` in the `provider_identifiers` table. When a user connects **Connect Zoom** or **Connect Slack** in the Hub, the app writes a row: `(user_id, provider, external_id)` (e.g. Zoom `host_id` or Slack `user` id). N8N must **look up** `user_id` from this table (by `provider` and `external_id`) before inserting into `drafts`, so the draft appears for the right user.
 
 ---
 
@@ -38,16 +36,18 @@ Goal: when a trigger fires (schedule, webhook, Zoom, Slack, etc.), N8N inserts o
 
 Use whatever fits your current N8N workflow.
 
-### 2. Process the trigger data (optional)
+### 2. Resolve Supabase user_id and prepare draft data
 
-- Use N8N nodes to get:
-  - **Title** – e.g. “Tasks from Zoom: Weekly Sync”
-  - **Body** – short description or list of proposed actions.
+- From the trigger you have an **external id** (e.g. Zoom `host_id`, Slack `user` id).
+- **Look up Supabase user_id:** Add a Supabase node **Get all** on table `provider_identifiers` with filters: `provider` = `zoom` (or `slack`) and `external_id` = the trigger’s host/user id. Use the first row’s `user_id` (UUID).
+- Then build:
+  - **Title** – e.g. meeting topic or message snippet.
+  - **Body** – description or full message.
   - **Source** – `zoom` or `slack`.
-  - **Type** – `task`, `message`, or `email`.
-  - **user_id** – the FlowAI Hub user who should see this draft (UUID from `auth.users`).
+  - **Type** – `task` (or `message` / `email`).
+  - **user_id** – from the lookup above (so the draft shows for that user in the Hub).
 
-If you don’t have `user_id` yet, use a fixed UUID for testing (one of your Supabase auth users).
+Users must have connected Zoom or Slack in FlowAI Hub at least once so a row exists in `provider_identifiers`.
 
 ### 3. Insert into Supabase `drafts`
 
@@ -103,16 +103,17 @@ Goal: when a user clicks **Approve** in FlowAI Hub, the app POSTs to N8N; N8N th
 
 ### 1. Create a webhook trigger in N8N
 
-1. Add a **Webhook** node at the start of a new workflow (or an existing one).
+1. Add a **Webhook** node at the start of the approval workflow.
 2. **HTTP Method:** POST.
-3. **Path:** e.g. `draft-approved` (or leave default).
-4. Save the workflow and copy the **Production Webhook URL** (e.g. `https://your-n8n.com/webhook/draft-approved`).
+3. **Path:** `draft-approval` (so the full URL is `https://your-n8n.com/webhook/draft-approval`).
+4. Save the workflow and copy the **Production Webhook URL**.
 
 ### 2. Set the URL in FlowAI Hub
 
-- In `.env.local` (and in Vercel env vars):  
-  `N8N_WEBHOOK_URL=https://your-n8n.com/webhook/draft-approved`
-- When a user approves a draft, the app sends:
+- In `.env.local` and in **Vercel** env vars set:  
+  `N8N_WEBHOOK_URL=https://your-n8n.com/webhook/draft-approval`  
+  (Use your real N8N base URL and the path you set in the Webhook node.)
+- When a user approves a draft, the app sends a POST with body:
   ```json
   {
     "draftId": "uuid-of-the-draft",
@@ -120,6 +121,7 @@ Goal: when a user clicks **Approve** in FlowAI Hub, the app POSTs to N8N; N8N th
     "userId": "uuid-of-the-user"
   }
   ```
+  In N8N the body is available as `$json.body.draftId`, `$json.body.action`, `$json.body.userId`.
 
 ### 3. In N8N: use the webhook payload
 
@@ -136,23 +138,14 @@ You can branch on `action === 'approved'` if you later send both approves and re
 
 ---
 
-## End-to-end example (text)
+## End-to-end example (Zoom → Approve → Slack)
 
-1. **Zoom meeting ends** (or a cron runs).
-2. N8N gets meeting summary (e.g. from Zoom API or transcript).
-3. N8N extracts “tasks” (manually or with an AI node).
-4. For each task (or once per meeting), N8N **inserts a row into `drafts`** with `user_id`, `source: 'zoom'`, `type: 'task'`, `title`, `body`, `status: 'pending'`.
+1. User has **connected Zoom** and **connected Slack** in FlowAI Hub (so `connections` and `provider_identifiers` have rows for that user).
+2. **Zoom meeting ends** → Zoom sends an event to your N8N “Zoom Meeting End” webhook (or N8N polls Zoom).
+3. N8N gets meeting details (topic, agenda, `host_id`). It **looks up** `provider_identifiers` where `provider = 'zoom'` and `external_id = host_id` → gets Supabase `user_id`.
+4. N8N **inserts a row into `drafts`** with that `user_id`, `source: 'zoom'`, `type: 'task'`, `title`, `body`, `status: 'pending'`.
 5. User opens FlowAI Hub and sees the draft under “Pending approvals”.
-6. User clicks **Approve**.
-7. FlowAI Hub updates the row to `status: 'approved'` and POSTs to **N8N_WEBHOOK_URL** with `draftId`, `action`, `userId`.
-8. N8N webhook workflow loads the draft from Supabase (by `draftId`), then posts to Slack (or creates a ticket, etc.).
+6. User clicks **Approve**. FlowAI Hub sets `status: 'approved'` and POSTs to **N8N_WEBHOOK_URL** with `{ draftId, action: 'approved', userId }`.
+7. N8N webhook workflow receives the POST, loads the draft from Supabase by `draftId`, checks `action === 'approved'`, then posts to Slack (or Jira). Finally N8N updates the draft to `status: 'executed'`.
 
----
-
-## Resolving `user_id` in real use
-
-- **Single user / testing:** Use one fixed UUID from Supabase Auth.
-- **Per Slack workspace:** Store in your app which `user_id` is linked to which Slack `team_id` (you have this in `connections`). When N8N sees an event from Slack, get `team_id`, look up `user_id` in `connections`, then insert the draft with that `user_id`.
-- **Per Zoom account:** Same idea with Zoom user/account id and your `connections` table.
-
-If you tell me your trigger (e.g. “Slack message in #standup” or “Zoom meeting ended webhook”), I can outline the exact N8N nodes and field mappings for that case.
+The included workflow file **FlowAI Hub v3 - Zoom → Slack Approve → Create Task.json** implements this flow: Zoom and Slack triggers → lookup `provider_identifiers` → insert draft → webhook `draft-approval` → get draft → if approved, route by type (Slack/Jira) → post/create → update draft to `executed`.

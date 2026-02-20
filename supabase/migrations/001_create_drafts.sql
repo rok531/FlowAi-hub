@@ -15,9 +15,9 @@ CREATE TABLE IF NOT EXISTS drafts (
   resolved_by UUID REFERENCES auth.users(id)
 );
 
-CREATE INDEX idx_drafts_user_id ON drafts(user_id);
-CREATE INDEX idx_drafts_status ON drafts(status);
-CREATE INDEX idx_drafts_created_at ON drafts(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_drafts_user_id ON drafts(user_id);
+CREATE INDEX IF NOT EXISTS idx_drafts_status ON drafts(status);
+CREATE INDEX IF NOT EXISTS idx_drafts_created_at ON drafts(created_at DESC);
 
 -- RLS: users see only their own drafts
 ALTER TABLE drafts ENABLE ROW LEVEL SECURITY;
