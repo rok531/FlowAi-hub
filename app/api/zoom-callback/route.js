@@ -10,7 +10,8 @@ export async function GET(request) {
   const code = url.searchParams.get('code');
   const state = url.searchParams.get('state');
 
-  const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : url.origin;
+  // Use the request's origin so redirect_uri matches what the client sent to Zoom (avoids invalid_grant on Vercel)
+  const baseUrl = url.origin;
   const redirectUri = `${baseUrl}/api/zoom-callback`;
 
   console.log('[Zoom OAuth] Callback. redirectUri:', redirectUri);

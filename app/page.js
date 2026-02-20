@@ -21,20 +21,29 @@ function ConnectedBannerInner() {
   const pathname = usePathname();
 
   const [message, setMessage] = useState(null);
+  const [isError, setIsError] = useState(false);
 
   useEffect(() => {
     const slack = searchParams.get('slack');
     const zoom = searchParams.get('zoom');
 
     let nextMessage = null;
+    let nextError = false;
     if (slack === 'connected') {
       nextMessage = 'Slack has been connected successfully.';
     } else if (zoom === 'connected') {
       nextMessage = 'Zoom has been connected successfully.';
+    } else if (slack === 'error') {
+      nextMessage = 'Slack connection failed. Check the terminal logs and that your Slack app redirect URL matches this site.';
+      nextError = true;
+    } else if (zoom === 'error') {
+      nextMessage = 'Zoom connection failed. Check the terminal logs and that your Zoom app redirect URL matches this site.';
+      nextError = true;
     }
 
     if (nextMessage) {
       setMessage(nextMessage);
+      setIsError(nextError);
       if (pathname) {
         router.replace(pathname, { scroll: false });
       }
@@ -44,8 +53,14 @@ function ConnectedBannerInner() {
   if (!message) return null;
 
   return (
-    <div className="mb-6 rounded-lg border border-emerald-500/70 bg-emerald-950/70 px-4 py-3 text-sm text-emerald-100 shadow-md shadow-emerald-500/25">
-      <span className="font-semibold">Success:</span> {message}
+    <div
+      className={`mb-6 rounded-lg border px-4 py-3 text-sm shadow-md ${
+        isError
+          ? 'border-amber-500/70 bg-amber-950/70 text-amber-100'
+          : 'border-emerald-500/70 bg-emerald-950/70 text-emerald-100'
+      }`}
+    >
+      <span className="font-semibold">{isError ? 'Connection failed:' : 'Success:'}</span> {message}
     </div>
   );
 }
