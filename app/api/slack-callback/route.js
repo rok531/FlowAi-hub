@@ -9,9 +9,9 @@ export async function GET(request) {
   const url = new URL(request.url);
   const code = url.searchParams.get('code');
   const state = url.searchParams.get('state'); // user_id passed from the app when starting OAuth
-  
-  // On Vercel, request.url origin can differ from the public URL; Slack requires redirect_uri to match exactly what the client used
-  const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : url.origin;
+
+  // Use the request's origin so redirect_uri matches what the client sent to Slack (avoids bad_redirect_uri on Vercel)
+  const baseUrl = url.origin;
   const redirectUri = `${baseUrl}/api/slack-callback`;
 
   console.log('[Slack OAuth] Callback. redirectUri:', redirectUri);
@@ -45,7 +45,7 @@ export async function GET(request) {
     const response = await fetch(SLACK_TOKEN_URL, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8',
+        'Content-Type': 'application/x-www-form-urlencoded',
       },
       body,
     });
