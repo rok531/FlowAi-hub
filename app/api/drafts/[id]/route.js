@@ -29,16 +29,17 @@ export async function PATCH(request, { params }) {
     return NextResponse.json({ error: 'Server misconfigured' }, { status: 500 });
   }
 
-  const cookieStore = cookies();
-  const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-    auth: { persistSession: false },
-  });
-
   const authHeader = request.headers.get('authorization');
-  const token = authHeader?.replace(/^Bearer\s+/i, '') || cookieStore.get('sb-access-token')?.value;
+  const token = authHeader?.replace(/^Bearer\s+/i, '') || (await cookies()).get('sb-access-token')?.value;
   if (!token) {
     return NextResponse.json({ error: 'Unauthorized. Send Authorization: Bearer <session.access_token> from client.' }, { status: 401 });
   }
+
+  // Use the user's token so RLS allows reading/updating their drafts
+  const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+    auth: { persistSession: false },
+    global: { headers: { Authorization: `Bearer ${token}` } },
+  });
 
   const { data: { user }, error: userError } = await supabase.auth.getUser(token);
   if (userError || !user) {
