@@ -1,4 +1,6 @@
 {
+  "framework": null,
+  "buildCommand": null,
   "rewrites": [
     { "source": "/", "destination": "/FlowAI-Hub_Kode.html" }
   ]
